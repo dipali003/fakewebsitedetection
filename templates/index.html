@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PhishGuard AI — Deep Learning Phishing Detection</title>
+  <meta name="description" content="PhishGuard AI uses a deep learning fusion model (char-CNN + BiLSTM) to detect phishing URLs and emails in real-time.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    /* ─── Design Tokens ─────────────────────────────────────────────────── */
+    :root {
+      --bg:          #060b14;
+      --surface:     rgba(255,255,255,0.04);
+      --surface-2:   rgba(255,255,255,0.07);
+      --border:      rgba(255,255,255,0.10);
+      --border-2:    rgba(255,255,255,0.16);
+      --text:        #e8edf5;
+      --text-muted:  #7a8ba0;
+      --accent:      #4f8ef7;
+      --accent-glow: rgba(79,142,247,0.35);
+      --danger:      #ff4d6d;
+      --danger-bg:   rgba(255,77,109,0.12);
+      --danger-glow: rgba(255,77,109,0.3);
+      --warn:        #fbbf24;
+      --warn-bg:     rgba(251,191,36,0.10);
+      --ok:          #34d399;
+      --ok-bg:       rgba(52,211,153,0.10);
+      --ok-glow:     rgba(52,211,153,0.3);
+      --radius:      16px;
+      --radius-sm:   10px;
+    }
+
+    /* ─── Reset & Base ──────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ─── Animated Background ───────────────────────────────────────────── */
+    .bg-mesh {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 15% 10%, rgba(79,142,247,0.12) 0%, transparent 60%),
+        radial-gradient(ellipse 70% 50% at 85% 80%, rgba(139,92,246,0.10) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 50% 50%, rgba(255,77,109,0.04) 0%, transparent 70%);
+      animation: meshShift 15s ease-in-out infinite alternate;
+    }
+
+    @keyframes meshShift {
+      0%   { opacity: 1; transform: scale(1) rotate(0deg); }
+      100% { opacity: .85; transform: scale(1.05) rotate(1.5deg); }
+    }
+
+    /* floating orbs */
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.18;
+      animation: float 20s ease-in-out infinite;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .orb-1 { width: 500px; height: 500px; background: #4f8ef7; top: -120px; left: -100px; animation-delay: 0s; }
+    .orb-2 { width: 400px; height: 400px; background: #8b5cf6; bottom: -80px; right: -80px; animation-delay: -7s; }
+    .orb-3 { width: 300px; height: 300px; background: #ff4d6d; top: 50%; left: 60%; animation-delay: -13s; }
+
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33%       { transform: translate(30px, -40px) scale(1.05); }
+      66%       { transform: translate(-20px, 30px) scale(0.97); }
+    }
+
+    /* ─── Layout ────────────────────────────────────────────────────────── */
+    .page-wrapper {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* ─── Header ────────────────────────────────────────────────────────── */
+    header {
+      padding: 22px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      background: rgba(6,11,20,0.6);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 42px;
+      height: 42px;
+      background: linear-gradient(135deg, #4f8ef7, #8b5cf6);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 0 20px rgba(79,142,247,0.4);
+      flex-shrink: 0;
+    }
+
+    .logo-text h1 {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      background: linear-gradient(135deg, #e8edf5, #a0b4cc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .logo-text p {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 400;
+      margin-top: 1px;
+    }
+
+    .header-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .badge-dot {
+      width: 7px;
+      height: 7px;
+      background: var(--ok);
+      border-radius: 50%;
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { box-shadow: 0 0 0 0 var(--ok-glow); }
+      50%       { box-shadow: 0 0 0 5px transparent; }
+    }
+
+    /* ─── Hero ──────────────────────────────────────────────────────────── */
+    .hero {
+      text-align: center;
+      padding: 64px 24px 40px;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    .hero-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 14px;
+      background: rgba(79,142,247,0.12);
+      border: 1px solid rgba(79,142,247,0.25);
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #7fb3f8;
+      margin-bottom: 20px;
+      letter-spacing: 0.3px;
+    }
+
+    .hero h2 {
+      font-size: clamp(28px, 5vw, 44px);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -1px;
+      background: linear-gradient(145deg, #ffffff 30%, #8baecf 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 14px;
+    }
+
+    .hero p {
+      font-size: 16px;
+      color: var(--text-muted);
+      line-height: 1.7;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+
+    /* ─── Model Pills ────────────────────────────────────────────────────── */
+    .model-pills {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 28px auto 0;
+    }
+
+    .pill {
+      padding: 5px 13px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .pill span { color: var(--accent); font-weight: 600; }
+
+    /* ─── Main Content ───────────────────────────────────────────────────── */
+    main {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 24px 60px;
+      width: 100%;
+    }
+
+    /* ─── Glass Card ─────────────────────────────────────────────────────── */
+    .glass-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+      margin-bottom: 20px;
+    }
+
+    .glass-card:hover {
+      border-color: var(--border-2);
+      box-shadow: 0 0 40px rgba(79,142,247,0.06);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 22px;
+    }
+
+    .card-header-icon {
+      width: 34px;
+      height: 34px;
+      background: rgba(79,142,247,0.15);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .card-header h3 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .card-header p {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* ─── Form Elements ──────────────────────────────────────────────────── */
+    .field-group {
+      margin-bottom: 18px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .input-wrap {
+      position: relative;
+    }
+
+    .input-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 15px;
+      pointer-events: none;
+      opacity: 0.6;
+    }
+
+    input[type=text] {
+      width: 100%;
+      padding: 12px 14px 12px 42px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 14px;
+      font-family: 'JetBrains Mono', monospace;
+      transition: border-color 0.25s, box-shadow 0.25s, background 0.25s;
+      outline: none;
+    }
+
+    input[type=text]::placeholder { color: var(--text-muted); opacity: 0.6; }
+
+    input[type=text]:focus {
+      border-color: var(--accent);
+      background: rgba(79,142,247,0.06);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .textarea-wrap { position: relative; }
+
+    .textarea-icon {
+      position: absolute;
+      left: 14px;
+      top: 14px;
+      font-size: 15px;
+      pointer-events: none;
+      opacity: 0.6;
+    }
+
+    textarea {
+      width: 100%;
+      padding: 12px 14px 12px 42px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 13.5px;
+      font-family: 'Inter', sans-serif;
+      min-height: 130px;
+      resize: vertical;
+      transition: border-color 0.25s, box-shadow 0.25s, background 0.25s;
+      outline: none;
+      line-height: 1.6;
+    }
+
+    textarea::placeholder { color: var(--text-muted); opacity: 0.5; }
+
+    textarea:focus {
+      border-color: var(--accent);
+      background: rgba(79,142,247,0.06);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    /* ─── CTA Button ─────────────────────────────────────────────────────── */
+    .btn-analyse {
+      width: 100%;
+      margin-top: 6px;
+      padding: 14px 24px;
+      background: linear-gradient(135deg, #4f8ef7, #7c6af7);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 15px;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      letter-spacing: 0.2px;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+      box-shadow: 0 4px 24px rgba(79,142,247,0.35);
+    }
+
+    .btn-analyse::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .btn-analyse:hover:not(:disabled)::before { opacity: 1; }
+    .btn-analyse:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 32px rgba(79,142,247,0.45);
+    }
+    .btn-analyse:active:not(:disabled) { transform: translateY(0); }
+
+    .btn-analyse:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .btn-inner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+    }
+
+    .spinner {
+      display: none;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .btn-analyse.loading .spinner { display: block; }
+    .btn-analyse.loading .btn-text::after { content: '…'; }
+
+    /* ─── Error ──────────────────────────────────────────────────────────── */
+    .error-box {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      background: var(--danger-bg);
+      border: 1px solid rgba(255,77,109,0.25);
+      border-radius: var(--radius-sm);
+      color: #ff8fa0;
+      font-size: 13px;
+      margin-top: 14px;
+    }
+
+    .error-box.visible { display: flex; animation: slideIn 0.3s ease; }
+
+    /* ─── Result Card ────────────────────────────────────────────────────── */
+    .result-card {
+      display: none;
+      animation: slideIn 0.4s cubic-bezier(0.16,1,0.3,1);
+    }
+
+    .result-card.visible { display: block; }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ─── Verdict Banner ─────────────────────────────────────────────────── */
+    .verdict-banner {
+      border-radius: var(--radius-sm);
+      padding: 20px 24px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      border: 1px solid transparent;
+      transition: all 0.4s ease;
+    }
+
+    .verdict-banner.HIGH {
+      background: var(--danger-bg);
+      border-color: rgba(255,77,109,0.3);
+      box-shadow: 0 0 40px rgba(255,77,109,0.12);
+    }
+
+    .verdict-banner.MEDIUM {
+      background: var(--warn-bg);
+      border-color: rgba(251,191,36,0.3);
+      box-shadow: 0 0 40px rgba(251,191,36,0.10);
+    }
+
+    .verdict-banner.LOW {
+      background: var(--ok-bg);
+      border-color: rgba(52,211,153,0.3);
+      box-shadow: 0 0 40px rgba(52,211,153,0.10);
+    }
+
+    .verdict-icon {
+      font-size: 34px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    .verdict-text { flex: 1; }
+
+    .verdict-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .HIGH  .verdict-title { color: var(--danger); }
+    .MEDIUM .verdict-title { color: var(--warn); }
+    .LOW   .verdict-title { color: var(--ok); }
+
+    .verdict-sub {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    /* ─── Risk Badge ─────────────────────────────────────────────────────── */
+    .risk-badge {
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+
+    .HIGH  .risk-badge { background: rgba(255,77,109,0.2); color: var(--danger); }
+    .MEDIUM .risk-badge { background: rgba(251,191,36,0.18); color: var(--warn); }
+    .LOW   .risk-badge { background: rgba(52,211,153,0.15); color: var(--ok); }
+
+    /* ─── Metric Gauges ──────────────────────────────────────────────────── */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .metric-card {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      text-align: center;
+      transition: border-color 0.25s, transform 0.25s;
+    }
+
+    .metric-card:hover {
+      border-color: var(--border-2);
+      transform: translateY(-2px);
+    }
+
+    .metric-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    .metric-value {
+      font-size: 28px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: -0.5px;
+      line-height: 1;
+      margin-bottom: 10px;
+    }
+
+    .metric-bar-track {
+      height: 4px;
+      background: rgba(255,255,255,0.07);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .metric-bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      width: 0%;
+      transition: width 0.8s cubic-bezier(0.16,1,0.3,1);
+    }
+
+    /* ─── Raw JSON ───────────────────────────────────────────────────────── */
+    .raw-section { margin-top: 6px; }
+
+    .raw-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 500;
+      user-select: none;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .raw-toggle:hover {
+      background: var(--surface-2);
+      border-color: var(--border-2);
+    }
+
+    .raw-toggle-arrow {
+      margin-left: auto;
+      transition: transform 0.3s ease;
+    }
+
+    .raw-toggle.open .raw-toggle-arrow { transform: rotate(180deg); }
+
+    pre#raw {
+      display: none;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+      color: #a8c7e8;
+      padding: 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      overflow: auto;
+      max-height: 280px;
+      line-height: 1.6;
+      animation: slideIn 0.25s ease;
+    }
+
+    pre#raw.visible { display: block; }
+
+    /* ─── Divider ────────────────────────────────────────────────────────── */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 8px 0 18px;
+    }
+
+    /* ─── Info Boxes ─────────────────────────────────────────────────────── */
+    .info-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .info-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+    }
+
+    .info-box-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .info-box ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .info-box li {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      line-height: 1.5;
+    }
+
+    .info-box li::before {
+      content: '→';
+      color: var(--accent);
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    /* ─── Footer ─────────────────────────────────────────────────────────── */
+    footer {
+      margin-top: auto;
+      border-top: 1px solid var(--border);
+      padding: 18px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-muted);
+      background: rgba(6,11,20,0.5);
+      backdrop-filter: blur(10px);
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    footer code {
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--surface-2);
+      padding: 2px 7px;
+      border-radius: 5px;
+      color: #7fb3f8;
+      font-size: 11px;
+    }
+
+    .footer-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* ─── Responsive ─────────────────────────────────────────────────────── */
+    @media (max-width: 600px) {
+      header { padding: 16px 20px; }
+      .hero  { padding: 40px 0 28px; }
+      main   { padding: 0 16px 40px; }
+      .metrics-grid { grid-template-columns: 1fr 1fr; }
+      .info-row { grid-template-columns: 1fr; }
+      footer { padding: 14px 20px; }
+      .header-badge span { display: none; }
+    }
+
+    /* ─── Syntax highlight colors for JSON ───────────────────────────────── */
+    .json-key   { color: #7fb3f8; }
+    .json-str   { color: #a8e6cf; }
+    .json-num   { color: #fbbf24; }
+    .json-bool  { color: #f472b6; }
+    .json-null  { color: #94a3b8; }
+  </style>
+</head>
+
+<body>
+  <div class="bg-mesh"></div>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+
+  <div class="page-wrapper">
+    <!-- Header -->
+    <header>
+      <div class="logo">
+        <div class="logo-icon">🛡️</div>
+        <div class="logo-text">
+          <h1>PhishGuard AI</h1>
+          <p>Deep Learning Threat Detection</p>
+        </div>
+      </div>
+      <div class="header-badge">
+        <div class="badge-dot" id="status-dot"></div>
+        <span id="status-text">Checking models…</span>
+      </div>
+    </header>
+
+    <!-- Hero -->
+    <div class="hero">
+      <div class="hero-tag">⚡ Powered by Deep Learning</div>
+      <h2>Detect Phishing<br>Before It Strikes</h2>
+      <p>Paste any suspicious URL or email body and our AI fusion model will classify it in milliseconds with confidence scores.</p>
+      <div class="model-pills">
+        <div class="pill">🔍 <span>Char-CNN</span> URL model</div>
+        <div class="pill">📧 <span>BiLSTM</span> Email model</div>
+        <div class="pill">🧠 <span>Fusion</span> classifier</div>
+      </div>
+    </div>
+
+    <!-- Main -->
+    <main>
+      <!-- Input Card -->
+      <div class="glass-card">
+        <div class="card-header">
+          <div class="card-header-icon">🔗</div>
+          <div>
+            <h3>Threat Analyser</h3>
+            <p>Provide a URL, email body, or both</p>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label for="url">Suspicious URL</label>
+          <div class="input-wrap">
+            <span class="input-icon">🌐</span>
+            <input type="text" id="url"
+              placeholder="https://paypal-secure-login.verify-account.xyz/...">
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label for="email">Email body / SMS text</label>
+          <div class="textarea-wrap">
+            <span class="textarea-icon">✉️</span>
+            <textarea id="email" placeholder="Dear customer, your account has been suspended. Click the link below to verify your identity immediately…"></textarea>
+          </div>
+        </div>
+
+        <button class="btn-analyse" id="go">
+          <div class="btn-inner">
+            <div class="spinner"></div>
+            <span class="btn-text">Analyse Threat</span>
+            <span>→</span>
+          </div>
+        </button>
+
+        <div class="error-box" id="err">
+          <span>⚠️</span>
+          <span id="err-msg"></span>
+        </div>
+      </div>
+
+      <!-- Result Card -->
+      <div class="result-card glass-card" id="result">
+        <!-- Verdict Banner -->
+        <div class="verdict-banner" id="verdict"></div>
+
+        <div class="divider"></div>
+
+        <!-- Metrics -->
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-label">Fusion Score</div>
+            <div class="metric-value" id="p-fusion">—</div>
+            <div class="metric-bar-track">
+              <div class="metric-bar-fill" id="bar-fusion"></div>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">URL Model</div>
+            <div class="metric-value" id="p-url">—</div>
+            <div class="metric-bar-track">
+              <div class="metric-bar-fill" id="bar-url"></div>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Email Model</div>
+            <div class="metric-value" id="p-email">—</div>
+            <div class="metric-bar-track">
+              <div class="metric-bar-fill" id="bar-email"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Raw JSON toggle -->
+        <div class="raw-section">
+          <div class="raw-toggle" id="raw-toggle">
+            <span>🔣</span>
+            <span>Raw API Response</span>
+            <span class="raw-toggle-arrow">▾</span>
+          </div>
+          <pre id="raw"></pre>
+        </div>
+      </div>
+
+      <!-- Info Row -->
+      <div class="info-row">
+        <div class="info-box">
+          <div class="info-box-title">📌 How it works</div>
+          <ul>
+            <li>URL is scanned character-by-character via CNN</li>
+            <li>Email text is processed with BiLSTM encoder</li>
+            <li>Fusion layer combines both scores for final verdict</li>
+          </ul>
+        </div>
+        <div class="info-box">
+          <div class="info-box-title">⚙️ Quick Start</div>
+          <ul>
+            <li>Run <code>python main.py train</code> to build models</li>
+            <li>Artifacts are saved to <code>artifacts/</code></li>
+            <li>Server starts on <code>localhost:5000</code></li>
+          </ul>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+      <span>PhishGuard AI &mdash; trained artifacts live in <code>artifacts/</code></span>
+      <div class="footer-right">
+        <span>char-CNN + BiLSTM + Fusion</span>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    /* ── Utilities ───────────────────────────────────────────────────── */
+    const $ = id => document.getElementById(id);
+
+    /* ── Health check ────────────────────────────────────────────────── */
+    (async () => {
+      try {
+        const r = await fetch('/api/health');
+        const d = await r.json();
+        const dot  = $('status-dot');
+        const text = $('status-text');
+        if (d.status === 'ok') {
+          dot.style.background = 'var(--ok)';
+          text.textContent = 'Models ready';
+        } else {
+          dot.style.background = 'var(--warn)';
+          text.textContent = 'Models not trained';
+        }
+      } catch {
+        $('status-dot').style.background = 'var(--danger)';
+        $('status-text').textContent = 'Server offline';
+      }
+    })();
+
+    /* ── Metric colour ───────────────────────────────────────────────── */
+    function probColor(p) {
+      const v = parseFloat(p);
+      if (v >= 0.65) return 'var(--danger)';
+      if (v >= 0.40) return 'var(--warn)';
+      return 'var(--ok)';
+    }
+
+    function barColor(p) {
+      const v = parseFloat(p);
+      if (v >= 0.65) return 'linear-gradient(90deg,#ff4d6d,#ff8fa0)';
+      if (v >= 0.40) return 'linear-gradient(90deg,#fbbf24,#fde68a)';
+      return 'linear-gradient(90deg,#34d399,#6ee7b7)';
+    }
+
+    function setMetric(valueId, barId, val) {
+      const el  = $(valueId);
+      const bar = $(barId);
+      el.textContent = val;
+      el.style.color = probColor(val);
+      const pct = Math.round(parseFloat(val) * 100);
+      bar.style.background = barColor(val);
+      setTimeout(() => { bar.style.width = pct + '%'; }, 50);
+    }
+
+    /* ── Syntax-highlight JSON ───────────────────────────────────────── */
+    function highlightJSON(str) {
+      return str
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, m => {
+          let cls = 'json-num';
+          if (/^"/.test(m)) cls = /:$/.test(m) ? 'json-key' : 'json-str';
+          else if (/true|false/.test(m)) cls = 'json-bool';
+          else if (/null/.test(m)) cls = 'json-null';
+          return `<span class="${cls}">${m}</span>`;
+        });
+    }
+
+    /* ── Raw JSON toggle ─────────────────────────────────────────────── */
+    $('raw-toggle').addEventListener('click', () => {
+      const toggle = $('raw-toggle');
+      const pre    = $('raw');
+      const open   = toggle.classList.toggle('open');
+      pre.classList.toggle('visible', open);
+    });
+
+    /* ── Analyse ─────────────────────────────────────────────────────── */
+    $('go').addEventListener('click', async () => {
+      const btn    = $('go');
+      const errBox = $('err');
+      const errMsg = $('err-msg');
+
+      // Reset
+      errBox.classList.remove('visible');
+      btn.disabled = true;
+      btn.classList.add('loading');
+
+      // Reset bars
+      ['bar-fusion','bar-url','bar-email'].forEach(id => {
+        const el = $(id);
+        el.style.width = '0%';
+        el.style.background = '';
+      });
+
+      try {
+        const r = await fetch('/api/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: $('url').value, email: $('email').value })
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Request failed');
+
+        // Show result card
+        const card = $('result');
+        card.classList.add('visible');
+        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+        // Verdict banner
+        const v   = $('verdict');
+        const isP = data.is_phishing;
+        const rl  = data.risk_level;
+        v.className = 'verdict-banner ' + rl;
+        v.innerHTML = `
+          <div class="verdict-icon">${isP ? '⚠️' : '✅'}</div>
+          <div class="verdict-text">
+            <div class="verdict-title">${isP ? 'Phishing Detected' : 'Looks Legitimate'}</div>
+            <div class="verdict-sub">Risk assessment complete · Confidence scores below</div>
+          </div>
+          <div class="risk-badge">${rl} risk</div>`;
+
+        // Metrics
+        setMetric('p-fusion', 'bar-fusion', data.phishing_probability);
+        setMetric('p-url',    'bar-url',    data.url_probability);
+        setMetric('p-email',  'bar-email',  data.email_probability);
+
+        // Raw JSON
+        $('raw').innerHTML = highlightJSON(JSON.stringify(data, null, 2));
+
+      } catch (e) {
+        errMsg.textContent = e.message;
+        errBox.classList.add('visible');
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('loading');
+      }
+    });
+
+    /* ── Enter key shortcut ──────────────────────────────────────────── */
+    $('url').addEventListener('keydown', e => {
+      if (e.key === 'Enter') $('go').click();
+    });
+  </script>
+</body>
+</html>
